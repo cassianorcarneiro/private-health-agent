@@ -1,53 +1,65 @@
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++#
-# PRIVATE HEALTH AI AGENT
+# PRIVATE HEALTH AI AGENT — V2 (sequential pipeline)
 # CASSIANO RIBEIRO CARNEIRO
-# V1
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++#
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import List
 
 
 @dataclass
 class Config:
 
     # ----- Ollama settings -----
-    # MedGemma é multimodal (texto + imagem) e treinado para domínio médico.
-    # Opções: medgemma:4b (3.3GB, multimodal), medgemma:27b (17GB, texto),
-    # medgemma1.5:4b (versão mais nova, 3D imaging, EHR, lab reports).
-    # Modelo TEXTUAL principal (planejamento, raciocínio, agregação):
-    ollama_model = "medgemma:4b"
-    # Modelo VISÃO (interpretação de imagens médicas e PDFs escaneados).
-    # Pode ser o mesmo do ollama_model se ele for multimodal.
-    ollama_vision_model = "medgemma:4b"
-    ollama_base_url = "http://127.0.0.1:11434"
+    # MedGemma é multimodal e treinado para domínio médico.
+    # Em hardware com mais memória, considere medgemma:27b (texto-only) para o
+    # raciocínio clínico e mantenha medgemma:4b apenas para a etapa de visão.
+    ollama_model: str = "medgemma:4b"
+    ollama_vision_model: str = "medgemma:4b"
+    ollama_base_url: str = "http://127.0.0.1:11434"
 
-    # ----- LLM temperatures -----
-    # Saúde exige conservadorismo; mantemos temperaturas baixas para reduzir alucinação.
-    temperature_planner = 0.0
-    temperature_drafters = 0.2
-    temperature_aggregator = 0.1
+    # Permite usar modelos diferentes por agente (avançado).
+    # Se vazio, usa ollama_model.
+    ollama_model_clinical: str = ""   # ex.: "medgemma:27b"
+    ollama_model_pharma: str = ""
 
-    # ----- Web Search settings -----
-    # Para consultas sobre sintomas/medicamentos, priorizamos fontes confiáveis.
-    ddgs_max_results_per_query = 5
-    max_queries = 6
-    max_sources_in_prompt = 12
+    # ----- Temperaturas -----
+    # Saúde exige conservadorismo; mantemos baixo em todas as etapas.
+    temperature_triage: float = 0.0
+    temperature_extractor: float = 0.0
+    temperature_planner: float = 0.0
+    temperature_clinical: float = 0.2
+    temperature_pharma: float = 0.1
+    temperature_synthesizer: float = 0.1
 
-    # Fontes médicas preferidas (usadas como dica para o planner).
-    preferred_medical_sources = [
+    # ----- Robustez -----
+    json_max_retries: int = 2
+    invoke_timeout_seconds: int = 180
+
+    # ----- Web Search -----
+    ddgs_max_results_per_query: int = 5
+    max_queries: int = 6
+    max_sources_in_prompt: int = 12
+
+    # Fontes médicas confiáveis. Re-ranking dá boost a essas.
+    preferred_medical_sources: List[str] = field(default_factory=lambda: [
         "ncbi.nlm.nih.gov", "pubmed.ncbi.nlm.nih.gov", "who.int",
         "cdc.gov", "nih.gov", "mayoclinic.org", "medlineplus.gov",
-        "uptodate.com", "bvsalud.org", "scielo.br",
-        "anvisa.gov.br", "gov.br/saude", "bulario.com",
-        "drugs.com", "rxlist.com", "fda.gov",
-    ]
+        "uptodate.com", "bvsalud.org", "scielo.br", "cochranelibrary.com",
+        "anvisa.gov.br", "gov.br/saude", "sbcardio.org.br", "diabetes.org.br",
+        "drugs.com", "rxlist.com", "fda.gov", "ema.europa.eu",
+        "merckmanuals.com", "msdmanuals.com",
+    ])
 
-    # ----- Health-specific settings -----
-    # Tamanho máximo (em caracteres) de texto extraído de PDF/planilha por exame.
-    # Evita estourar contexto com exames muito longos.
-    max_exam_text_chars = 20000
+    # ----- Health-specific -----
+    max_exam_text_chars: int = 20000
+    exams_dir: str = "./exames"
+    history_max_turns: int = 6
 
-    # Diretório padrão onde os exames podem ser colocados (opcional).
-    exams_dir = "./exames"
+    # Sanitização de PII antes do planner (evita vazar nome do paciente em queries)
+    sanitize_pii_in_search: bool = True
+
+    # Diretório de prompts versionados
+    prompts_dir: str = "./prompts"

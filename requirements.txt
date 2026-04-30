@@ -1,9 +1,7 @@
-langgraph
+langgraph>=0.2.0
 ddgs
-langchain
-langchain-ollama
-pydantic
-ollama
+pydantic>=2.0
+ollama>=0.4.0
 rich
 
 # Leitura de exames em PDF
@@ -14,5 +12,5 @@ pdfplumber
 openpyxl
 pandas
 
-# Manipulação de imagens (MedGemma vision)
+# Manipulação de imagens (cache base64)
 Pillow
