@@ -10,7 +10,6 @@
 
 from __future__ import annotations
 
-import os
 import re
 import json
 from pathlib import Path
@@ -151,17 +150,23 @@ class HealthAgent:
         self.console = Console()
         self.history: List[Dict[str, str]] = []
         self.exam_loader = ExamLoader(max_chars=self.config.max_exam_text_chars)
+
+        self.console.print("[dim]→ Carregando prompts...[/dim]")
         self.prompts = load_prompts(self.config.prompts_dir)
 
+        self.console.print("[dim]→ Verificando modelos no Ollama...[/dim]")
         self._check_model()
 
+        self.console.print("[dim]→ Inicializando cliente LLM...[/dim]")
         self.llm = LLMClient(
             base_url=self.config.ollama_base_url,
             default_model=self.config.ollama_model,
             json_max_retries=self.config.json_max_retries,
         )
 
+        self.console.print("[dim]→ Construindo grafo de agentes...[/dim]")
         self.app = self.build_graph()
+        self.console.print("[green]✓ Pronto.[/green]\n")
 
     # ---- Model resolution ----------------------------------------------------------------------
 
@@ -193,11 +198,14 @@ class HealthAgent:
                     self.config.ollama_model_pharma, model_details, "pharma"
                 )
         except Exception as e:
-            self.console.print(f"❌ Erro ao conectar ao Ollama: {e}", style="bold red")
-            self.console.print("\n🔧 [yellow]Possíveis soluções:[/yellow]")
-            self.console.print("1. Verifique se o Ollama está rodando: [cyan]ollama serve[/cyan]")
-            self.console.print("2. Instale o MedGemma:                [cyan]ollama pull medgemma:4b[/cyan]")
-            raise
+            raise RuntimeError(
+                f"Não consegui conectar ao Ollama em {self.config.ollama_base_url}.\n"
+                f"   Erro original: {e}\n\n"
+                "🔧 Possíveis soluções:\n"
+                "   1. Verifique se o Ollama está rodando:  ollama serve\n"
+                "   2. Instale o MedGemma:                  ollama pull medgemma:4b\n"
+                "   3. Confirme a URL em config.ollama_base_url"
+            ) from e
 
     def _resolve_model(self, requested: str, model_details: list, label: str) -> str:
         """
@@ -675,7 +683,19 @@ def main():
 
     try:
         agent = HealthAgent(config=config)
+    except FileNotFoundError as e:
+        console.print(f"\n[bold red]❌ Arquivo de prompt ausente:[/bold red]\n   {e}")
+        console.print(
+            "\n[yellow]Os prompts ficam em ./prompts/ ao lado do agent.py.[/yellow]\n"
+            "Verifique se a pasta foi copiada junto com os .py."
+        )
+        return
+    except RuntimeError as e:
+        console.print(f"\n[bold red]❌ {e}[/bold red]")
+        return
     except Exception:
+        console.print("\n[bold red]❌ Falha inesperada na inicialização:[/bold red]")
+        console.print_exception()
         return
 
     agent.console.print(Panel(
@@ -784,5 +804,7 @@ def main():
 
 
 if __name__ == "__main__":
-    os.system("cls" if os.name == "nt" else "clear")
+    # Note: deliberadamente NÃO chamamos os.system("clear") aqui — em alguns
+    # terminais (Windows sem TERM, IDEs, redirecionamento) isso pode esconder
+    # mensagens de erro. Se quiser limpar: `clear && python agent.py`
     main()
