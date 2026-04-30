@@ -1,0 +1,18 @@
+langgraph
+ddgs
+langchain
+langchain-ollama
+pydantic
+ollama
+rich
+
+# Leitura de exames em PDF
+pypdf
+pdfplumber
+
+# Leitura de planilhas (Excel) e CSVs
+openpyxl
+pandas
+
+# Manipulação de imagens (MedGemma vision)
+Pillow
