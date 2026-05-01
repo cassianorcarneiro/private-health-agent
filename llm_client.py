@@ -1,8 +1,8 @@
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++#
-# Cliente LLM unificado.
-# - Uma única API para texto e visão (baseada em ollama.chat nativo).
-# - JSON estruturado com format=schema_pydantic + retry com erro de validação.
-# - Sanitização básica de saída JSON (LLMs vazam markdown).
+# UNIFIED LLM CLIENT
+# - Single API for text and vision (based on native ollama.chat).
+# - Structured JSON using format=schema_pydantic + retry on validation error.
+# - Basic JSON output sanitization (LLMs often leak markdown).
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++#
 
 from __future__ import annotations
@@ -29,12 +29,12 @@ class LLMClient:
 
     @staticmethod
     def _safe_json_extract(text: str) -> dict:
-        """Tolera markdown fences e prefixos vazados do modelo."""
+        """Tolerates markdown fences and model-leaked prefixes."""
         text = text.strip()
         # Strip code fences
         if text.startswith("```"):
             text = text.strip("`")
-            # Remove eventual rótulo "json"
+            # Remove potential "json" label
             if text.lower().startswith("json"):
                 text = text[4:]
             text = text.strip()
@@ -48,7 +48,7 @@ class LLMClient:
             return json.loads(text[l : r + 1])
         raise ValueError("Could not parse JSON from model output.")
 
-    # -- chamadas básicas ------------------------------------------------------------------------
+    # -- basic calls -----------------------------------------------------------------------------
 
     def chat_text(
         self,
@@ -57,7 +57,7 @@ class LLMClient:
         model: Optional[str] = None,
         images_b64: Optional[List[str]] = None,
     ) -> str:
-        """Chamada simples; retorna o conteúdo de texto da resposta."""
+        """Simple call; returns the text content of the response."""
         message = {"role": "user", "content": prompt}
         if images_b64:
             message["images"] = images_b64
@@ -68,7 +68,7 @@ class LLMClient:
         )
         return resp["message"]["content"].strip()
 
-    # -- JSON estruturado com validação Pydantic e retry -----------------------------------------
+    # -- structured JSON with Pydantic validation and retry --------------------------------------
 
     def chat_structured(
         self,
@@ -79,8 +79,8 @@ class LLMClient:
         images_b64: Optional[List[str]] = None,
     ) -> T:
         """
-        Chama o modelo pedindo JSON, valida com Pydantic, e tenta novamente
-        em caso de falha — incluindo o erro na próxima mensagem.
+        Calls the model requesting JSON, validates with Pydantic, and retries 
+        in case of failure — including the error in the next message.
         """
         last_error: Optional[str] = None
         last_raw: Optional[str] = None
@@ -90,10 +90,10 @@ class LLMClient:
             if last_error and last_raw:
                 full_prompt = (
                     prompt
-                    + "\n\n---\nTentativa anterior falhou validação:\n"
-                    + f"OUTPUT_INVÁLIDO:\n{last_raw[:1500]}\n"
-                    + f"ERRO:\n{last_error[:800]}\n"
-                    + "Responda APENAS o JSON válido conforme o schema, sem markdown nem comentários."
+                    + "\n\n---\nPrevious attempt failed validation:\n"
+                    + f"INVALID_OUTPUT:\n{last_raw[:1500]}\n"
+                    + f"ERROR:\n{last_error[:800]}\n"
+                    + "Respond ONLY with valid JSON according to the schema, without markdown or comments."
                 )
 
             message = {"role": "user", "content": full_prompt}
@@ -104,7 +104,7 @@ class LLMClient:
                 resp = self._client.chat(
                     model=model or self.default_model,
                     messages=[message],
-                    # format="json" força saída JSON em modelos compatíveis com Ollama.
+                    # format="json" forces JSON output on compatible Ollama models.
                     format="json",
                     options={"temperature": temperature},
                 )
@@ -116,9 +116,9 @@ class LLMClient:
                 last_error = str(e)
                 if attempt >= self.json_max_retries:
                     raise StructuredOutputError(
-                        f"Falha ao obter JSON válido para {schema.__name__} "
-                        f"após {self.json_max_retries + 1} tentativas. "
-                        f"Último erro: {last_error}"
+                        f"Failed to obtain valid JSON for {schema.__name__} "
+                        f"after {self.json_max_retries + 1} attempts. "
+                        f"Last error: {last_error}"
                     ) from e
 
 

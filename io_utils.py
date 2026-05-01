@@ -1,6 +1,6 @@
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++#
-# Utilitários de I/O: leitura de exames, sanitização de PII, ranking de fontes.
-# Mantidos fora do agent.py para serem testáveis isoladamente.
+# I/O Utilities: Exam reading, PII sanitization, and source ranking.
+# Kept separate from agent.py to remain independently testable.
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++#
 
 from __future__ import annotations
@@ -16,10 +16,10 @@ PDF_EXTS = {".pdf"}
 SHEET_EXTS = {".xlsx", ".xls", ".csv", ".tsv"}
 
 
-# ---------- Leitura de PDFs e planilhas ----------------------------------------------------------
+# ---------- PDF and Spreadsheet Reading ----------------------------------------------------------
 
 def read_pdf(path: Path) -> str:
-    """Extrai texto e tabelas de PDF. pdfplumber primeiro, fallback para pypdf."""
+    """Extracts text and tables from PDF. Tries pdfplumber first, falls back to pypdf."""
     try:
         import pdfplumber
         chunks: List[str] = []
@@ -33,9 +33,9 @@ def read_pdf(path: Path) -> str:
                         clean = [str(c).strip() if c is not None else "" for c in row]
                         if any(clean):
                             table_text_parts.append(" | ".join(clean))
-                section = f"--- Página {i} ---\n{text}".strip()
+                section = f"--- Page {i} ---\n{text}".strip()
                 if table_text_parts:
-                    section += "\n[Tabelas]\n" + "\n".join(table_text_parts)
+                    section += "\n[Tables]\n" + "\n".join(table_text_parts)
                 chunks.append(section)
         return "\n\n".join(chunks).strip()
     except Exception:
@@ -43,15 +43,15 @@ def read_pdf(path: Path) -> str:
             from pypdf import PdfReader
             reader = PdfReader(str(path))
             return "\n\n".join(
-                f"--- Página {i+1} ---\n{(p.extract_text() or '').strip()}"
+                f"--- Page {i+1} ---\n{(p.extract_text() or '').strip()}"
                 for i, p in enumerate(reader.pages)
             ).strip()
         except Exception as e:
-            return f"(Falha ao ler PDF {path.name}: {e})"
+            return f"(Failed to read PDF {path.name}: {e})"
 
 
 def read_sheet(path: Path) -> str:
-    """Lê CSV/TSV/XLSX. Retorna texto tabular legível."""
+    """Reads CSV/TSV/XLSX. Returns readable tabular text."""
     try:
         import pandas as pd
         ext = path.suffix.lower()
@@ -63,17 +63,17 @@ def read_sheet(path: Path) -> str:
             xls = pd.read_excel(path, sheet_name=None)
             parts = []
             for name, df in xls.items():
-                parts.append(f"--- Aba: {name} ---\n{df.to_string(index=False)}")
+                parts.append(f"--- Sheet: {name} ---\n{df.to_string(index=False)}")
             return "\n\n".join(parts)
         return df.to_string(index=False)
     except Exception as e:
-        return f"(Falha ao ler planilha {path.name}: {e})"
+        return f"(Failed to read spreadsheet {path.name}: {e})"
 
 
-# ---------- Loading com cache de base64 (evita reler imagem a cada turno) ------------------------
+# ---------- Loading with base64 cache (avoids re-reading images every turn) ------------------------
 
 class ExamLoader:
-    """Acumula exames carregados ao longo da sessão. Cacheia base64 das imagens."""
+    """Accumulates loaded exams throughout the session. Caches base64 of images."""
 
     def __init__(self, max_chars: int = 20000):
         self.max_chars = max_chars
@@ -96,21 +96,21 @@ class ExamLoader:
                 resolved = str(p.resolve())
                 if resolved not in self.image_paths:
                     self.image_paths.append(resolved)
-                    # Pré-aquece cache de base64
+                    # Warm up base64 cache
                     b64 = self._encode_image_b64(resolved)
                     if b64:
                         self._image_b64_cache[resolved] = b64
                         added_images += 1
             elif ext in PDF_EXTS:
                 text = read_pdf(p)
-                self.text_parts.append(f"### Arquivo: {p.name}\n{text}")
+                self.text_parts.append(f"### File: {p.name}\n{text}")
                 added_text_chars += len(text)
             elif ext in SHEET_EXTS:
                 text = read_sheet(p)
-                self.text_parts.append(f"### Arquivo: {p.name}\n{text}")
+                self.text_parts.append(f"### File: {p.name}\n{text}")
                 added_text_chars += len(text)
             else:
-                missing.append(f"{p} (extensão não suportada)")
+                missing.append(f"{p} (unsupported extension)")
 
         return {
             "added_text_chars": added_text_chars,
@@ -127,11 +127,11 @@ class ExamLoader:
     def text(self) -> str:
         full = "\n\n".join(self.text_parts).strip()
         if len(full) > self.max_chars:
-            full = full[: self.max_chars] + "\n\n[...texto truncado por limite de contexto...]"
+            full = full[: self.max_chars] + "\n\n[...text truncated due to context limit...]"
         return full
 
     def images_base64(self) -> List[str]:
-        """Retorna o cache pré-computado, sem reler do disco."""
+        """Returns pre-computed cache without re-reading from disk."""
         return [
             b64 for p in self.image_paths
             if (b64 := self._image_b64_cache.get(p))
@@ -149,30 +149,30 @@ class ExamLoader:
             return None
 
 
-# ---------- Sanitização de PII antes de mandar pro planner ---------------------------------------
+# ---------- PII Sanitization before sending to planner ---------------------------------------
 
-# Padrões conservadores. O objetivo não é compliance LGPD/HIPAA — é reduzir o
-# risco de o planner copiar literalmente trechos identificáveis para queries.
+# Conservative patterns. The goal isn't strict legal compliance (GDPR/HIPAA),
+# but reducing the risk of the planner copying identifiable snippets into search queries.
 
 _PII_PATTERNS: List[Tuple[re.Pattern, str]] = [
-    # CPF (XXX.XXX.XXX-XX) e variações
-    (re.compile(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b"), "[CPF]"),
-    # RG aproximado
+    # Brazilian CPF (XXX.XXX.XXX-XX) and variations
+    (re.compile(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b"), "[TAX_ID]"),
+    # Approximate Brazilian RG
     (re.compile(r"\b\d{2}\.?\d{3}\.?\d{3}-?[0-9Xx]\b"), "[RG]"),
-    # Datas em formatos comuns
-    (re.compile(r"\b\d{2}/\d{2}/\d{2,4}\b"), "[DATA]"),
-    (re.compile(r"\b\d{4}-\d{2}-\d{2}\b"), "[DATA]"),
-    # Telefones (com ou sem parênteses); usa lookbehind/lookahead leves
-    (re.compile(r"\(?\d{2}\)?[\s-]?9?\d{4}-?\d{4}"), "[TEL]"),
+    # Common date formats
+    (re.compile(r"\b\d{2}/\d{2}/\d{2,4}\b"), "[DATE]"),
+    (re.compile(r"\b\d{4}-\d{2}-\d{2}\b"), "[DATE]"),
+    # Phone numbers (with or without parentheses)
+    (re.compile(r"\(?\d{2}\)?[\s-]?9?\d{4}-?\d{4}"), "[PHONE]"),
     # E-mails
     (re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b"), "[EMAIL]"),
-    # Números de prontuário/protocolo de aparência longa
-    (re.compile(r"\b(?:prontu[áa]rio|protocolo|registro)[\s#:]*\d{4,}\b", re.IGNORECASE), "[ID]"),
+    # Long-form medical record/protocol/registration numbers
+    (re.compile(r"\b(?:record|protocol|registration|prontu[áa]rio)[\s#:]*\d{4,}\b", re.IGNORECASE), "[ID]"),
 ]
 
 
 def sanitize_pii(text: str) -> str:
-    """Substitui padrões comuns de PII brasileiros por placeholders."""
+    """Replaces common Brazilian PII patterns with placeholders."""
     if not text:
         return text
     out = text
@@ -181,10 +181,10 @@ def sanitize_pii(text: str) -> str:
     return out
 
 
-# ---------- Re-ranking de resultados de busca ----------------------------------------------------
+# ---------- Search Result Re-ranking ----------------------------------------------------
 
 def domain_of(url: str) -> str:
-    """Extrai o domínio efetivo de uma URL, sem dependências externas."""
+    """Extracts the effective domain from a URL without external dependencies."""
     if not url:
         return ""
     m = re.match(r"^https?://([^/]+)", url)
@@ -202,8 +202,8 @@ def rank_sources(
     max_items: int,
 ) -> List[Dict[str, Any]]:
     """
-    Reordena resultados: fontes confiáveis (substring match em domínio) vêm primeiro.
-    Mantém a ordem relativa dentro de cada bucket.
+    Reorders results: trusted sources (substring match in domain) come first.
+    Maintains relative order within each bucket.
     """
     preferred_lower = [d.lower() for d in preferred_domains]
 
@@ -219,7 +219,7 @@ def rank_sources(
                 return 2
         return 1
 
-    # Anota score, ordena estável por -score
+    # Annotate score, stable sort by -score
     annotated = [(score(r), i, r) for i, r in enumerate(results)]
     annotated.sort(key=lambda t: (-t[0], t[1]))
     ranked = [r for s, _, r in annotated if s >= 0]
@@ -230,12 +230,12 @@ def filter_sources_by_intent(
     sources: List[Dict[str, Any]],
     intents_allowed: List[str],
 ) -> List[Dict[str, Any]]:
-    """Filtra fontes pelo campo 'intent' anotado quando a query foi rodada."""
+    """Filters sources by the 'intent' field annotated when the query was run."""
     return [s for s in sources if s.get("intent") in intents_allowed]
 
 
 def summarize_sources(sources: List[Dict[str, Any]], max_items: int) -> str:
-    """Formata as fontes em texto compacto para entrar nos prompts."""
+    """Formats sources into compact text for inclusion in prompts."""
     lines: List[str] = []
     for item in sources[:max_items]:
         if item.get("error"):
@@ -246,4 +246,4 @@ def summarize_sources(sources: List[Dict[str, Any]], max_items: int) -> str:
         if not (title or url or body):
             continue
         lines.append(f"- {title}\n  {url}\n  {body[:400]}")
-    return "\n".join(lines) if lines else "(Nenhuma fonte útil retornada.)"
+    return "\n".join(lines) if lines else "(No useful sources returned.)"

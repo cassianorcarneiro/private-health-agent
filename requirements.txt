@@ -4,13 +4,10 @@ pydantic>=2.0
 ollama>=0.4.0
 rich
 
-# Leitura de exames em PDF
 pypdf
 pdfplumber
 
-# Leitura de planilhas (Excel) e CSVs
 openpyxl
 pandas
 
-# Manipulação de imagens (cache base64)
 Pillow

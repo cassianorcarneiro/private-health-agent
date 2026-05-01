@@ -1,6 +1,6 @@
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++#
-# Schemas Pydantic para os outputs estruturados dos agentes.
-# Cada agente do pipeline produz um JSON validado por um destes schemas.
+# Pydantic schemas for the structured outputs of the agents.
+# Each agent in the pipeline produces a JSON validated by one of these schemas.
 # ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++#
 
 from __future__ import annotations
@@ -106,8 +106,8 @@ class DrugInfo(BaseModel):
     contraindications: List[str] = Field(default_factory=list)
     high_risk_populations: List[str] = Field(default_factory=list)
     dose_disclaimer: str = (
-        "Doses individuais devem ser definidas por médico — "
-        "informação aqui é genérica de bula."
+        "Individual doses must be defined by a physician — "
+        "information provided here is generic package insert info."
     )
 
 

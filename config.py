@@ -13,20 +13,20 @@ from typing import List
 class Config:
 
     # ----- Ollama settings -----
-    # MedGemma é multimodal e treinado para domínio médico.
-    # Em hardware com mais memória, considere medgemma:27b (texto-only) para o
-    # raciocínio clínico e mantenha medgemma:4b apenas para a etapa de visão.
+    # MedGemma is multimodal and trained specifically for the medical domain.
+    # On hardware with more memory, consider using medgemma:27b (text-only) for
+    # clinical reasoning and keep medgemma:4b solely for the vision stage.
     ollama_model: str = "medgemma:4b"
     ollama_vision_model: str = "medgemma:4b"
     ollama_base_url: str = "http://127.0.0.1:11434"
 
-    # Permite usar modelos diferentes por agente (avançado).
-    # Se vazio, usa ollama_model.
-    ollama_model_clinical: str = ""   # ex.: "medgemma:27b"
+    # Allows using different models per agent (advanced).
+    # If empty, defaults to ollama_model.
+    ollama_model_clinical: str = ""   # e.g.: "medgemma:27b"
     ollama_model_pharma: str = ""
 
-    # ----- Temperaturas -----
-    # Saúde exige conservadorismo; mantemos baixo em todas as etapas.
+    # ----- Temperatures -----
+    # Health requires a conservative approach; we keep it low at all stages.
     temperature_triage: float = 0.0
     temperature_extractor: float = 0.0
     temperature_planner: float = 0.0
@@ -34,7 +34,7 @@ class Config:
     temperature_pharma: float = 0.1
     temperature_synthesizer: float = 0.1
 
-    # ----- Robustez -----
+    # ----- Robustness -----
     json_max_retries: int = 2
     invoke_timeout_seconds: int = 180
 
@@ -43,7 +43,7 @@ class Config:
     max_queries: int = 6
     max_sources_in_prompt: int = 12
 
-    # Fontes médicas confiáveis. Re-ranking dá boost a essas.
+    # Trusted medical sources. Re-ranking gives a boost to these domains.
     preferred_medical_sources: List[str] = field(default_factory=lambda: [
         "ncbi.nlm.nih.gov", "pubmed.ncbi.nlm.nih.gov", "who.int",
         "cdc.gov", "nih.gov", "mayoclinic.org", "medlineplus.gov",
@@ -55,11 +55,11 @@ class Config:
 
     # ----- Health-specific -----
     max_exam_text_chars: int = 20000
-    exams_dir: str = "./exames"
+    exams_dir: str = "./exams"
     history_max_turns: int = 6
 
-    # Sanitização de PII antes do planner (evita vazar nome do paciente em queries)
+    # PII Sanitization before the planner (prevents leaking patient names in web queries)
     sanitize_pii_in_search: bool = True
 
-    # Diretório de prompts versionados
+    # Directory for versioned prompts
     prompts_dir: str = "./prompts"
